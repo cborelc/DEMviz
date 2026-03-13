@@ -1,0 +1,927 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>DEM Viewer (p5.js)</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.min.js"></script>
+  <script src="./vendor/geotiff.main.js"></script>
+  <style>
+    :root {
+      --bg: #0e1116;
+      --panel: #1a222d;
+      --text: #eef2f7;
+      --muted: #a8b4c4;
+      --accent: #ffb74d;
+    }
+
+    html, body {
+      margin: 0;
+      height: 100%;
+      font-family: "Trebuchet MS", "Segoe UI", sans-serif;
+      color: var(--text);
+      background: radial-gradient(circle at 10% 10%, #1f2c3d 0%, #0e1116 55%);
+    }
+
+    #app {
+      position: relative;
+      height: 100%;
+      overflow: hidden;
+    }
+
+    #ui {
+      position: absolute;
+      top: 12px;
+      right: 12px;
+      z-index: 10;
+      display: flex;
+      flex-direction: column;
+      gap: 0.55rem;
+      width: min(380px, 42vw);
+      padding: 0.9rem;
+      background: color-mix(in oklab, var(--panel), black 15%);
+      border: 1px solid #2a3443;
+      border-radius: 12px;
+      box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
+    }
+
+    .row {
+      display: grid;
+      grid-template-columns: 1fr 1fr auto;
+      align-items: center;
+      gap: 0.5rem;
+      color: var(--muted);
+      font-size: 0.86rem;
+    }
+
+    .row.compact {
+      grid-template-columns: 1fr 1fr;
+    }
+
+    .row.toggle {
+      grid-template-columns: 1fr auto;
+    }
+
+    .row select,
+    .row input[type="number"] {
+      width: 100%;
+      background: #17202b;
+      border: 1px solid #2a3443;
+      color: var(--text);
+      padding: 0.25rem 0.4rem;
+      border-radius: 6px;
+    }
+
+    .row select:disabled,
+    .row input[type="number"]:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+
+    input[type="range"] {
+      width: 100%;
+      accent-color: var(--accent);
+    }
+
+    input[type="file"] {
+      width: 100%;
+      color: var(--muted);
+    }
+
+    button {
+      border: 1px solid #2d3b4b;
+      background: #222f3f;
+      color: var(--text);
+      padding: 0.45rem 0.65rem;
+      border-radius: 8px;
+      cursor: pointer;
+      font-weight: 600;
+    }
+
+    button:hover {
+      background: #2b3a4e;
+    }
+
+    .preset-row {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 0.35rem;
+    }
+
+    #legend {
+      position: absolute;
+      left: 12px;
+      bottom: 12px;
+      z-index: 8;
+      background: rgba(12, 16, 22, 0.8);
+      border: 1px solid #2b3644;
+      border-radius: 8px;
+      padding: 0.45rem 0.6rem;
+      color: #c8d5e2;
+      font-size: 0.82rem;
+      pointer-events: none;
+      line-height: 1.4;
+    }
+
+    #scale {
+      position: absolute;
+      left: 12px;
+      bottom: 78px;
+      z-index: 8;
+      background: rgba(12, 16, 22, 0.8);
+      border: 1px solid #2b3644;
+      border-radius: 8px;
+      padding: 0.45rem 0.6rem;
+      color: #c8d5e2;
+      font-size: 0.82rem;
+      pointer-events: none;
+      line-height: 1.2;
+      min-width: 160px;
+    }
+
+    #scaleBar {
+      height: 6px;
+      background: linear-gradient(90deg, #c8d5e2 0%, #c8d5e2 50%, transparent 50%, transparent 100%);
+      border: 1px solid #c8d5e2;
+      margin-top: 6px;
+    }
+
+    #stats {
+      position: absolute;
+      left: 12px;
+      top: 12px;
+      z-index: 8;
+      background: rgba(12, 16, 22, 0.82);
+      border: 1px solid #2b3644;
+      border-radius: 8px;
+      padding: 0.5rem 0.7rem;
+      color: #d9e3ee;
+      font-size: 0.82rem;
+      pointer-events: none;
+      white-space: pre;
+      min-width: 240px;
+    }
+
+    canvas { display: block; }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <div id="ui">
+      <div class="row" style="grid-template-columns: 1fr;">
+        <label for="demFile">Load DEM (image, GeoTIFF, or RAW)</label>
+        <input id="demFile" type="file" accept="image/*,.tif,.tiff,.raw,.bin" />
+      </div>
+      <div class="row">
+        <label for="heightScale">Height scale (0-4)</label>
+        <input id="heightScale" type="range" min="0" max="4" step="0.01" value="1" />
+        <span id="heightScaleVal">1.00</span>
+      </div>
+      <div class="preset-row">
+        <button data-scale="0.5">0.5x</button>
+        <button data-scale="1">1x</button>
+        <button data-scale="2">2x</button>
+        <button data-scale="4">4x</button>
+      </div>
+      <div class="row">
+        <label for="lightAz">Light azimuth</label>
+        <input id="lightAz" type="range" min="-180" max="180" step="1" value="135" />
+        <span id="lightAzVal">135</span>
+      </div>
+      <div class="row">
+        <label for="lightEl">Light elevation</label>
+        <input id="lightEl" type="range" min="0" max="90" step="1" value="55" />
+        <span id="lightElVal">55</span>
+      </div>
+      <div class="row">
+        <label for="lightInt">Light intensity</label>
+        <input id="lightInt" type="range" min="0" max="2" step="0.1" value="1.0" />
+        <span id="lightIntVal">1.0</span>
+      </div>
+      <div class="row">
+        <label for="hemiFactor">Hemi factor</label>
+        <input id="hemiFactor" type="range" min="0" max="1" step="0.05" value="0.35" />
+        <span id="hemiFactorVal">0.35</span>
+      </div>
+      <div class="row">
+        <label for="hemiSamples">Hemi samples</label>
+        <input id="hemiSamples" type="range" min="4" max="64" step="1" value="20" />
+        <span id="hemiSamplesVal">20</span>
+      </div>
+      <div class="row toggle">
+        <label for="toggleShadows">Shadows</label>
+        <input id="toggleShadows" type="checkbox" checked />
+      </div>
+      <div class="row toggle">
+        <label for="toggleHemi">Hemisphere</label>
+        <input id="toggleHemi" type="checkbox" checked />
+      </div>
+      <div class="row toggle">
+        <label for="togglePerspective">Perspective</label>
+        <input id="togglePerspective" type="checkbox" checked />
+      </div>
+      <div class="row toggle">
+        <label for="toggleOrtho">Ortho</label>
+        <input id="toggleOrtho" type="checkbox" />
+      </div>
+      <div class="row compact">
+        <label for="rawWidth">RAW width</label>
+        <input id="rawWidth" type="number" min="2" value="512" disabled />
+      </div>
+      <div class="row compact">
+        <label for="rawHeight">RAW height</label>
+        <input id="rawHeight" type="number" min="2" value="512" disabled />
+      </div>
+      <div class="row compact">
+        <label for="rawType">RAW type</label>
+        <select id="rawType" disabled>
+          <option value="uint16" selected>uint16</option>
+          <option value="int16">int16</option>
+          <option value="float32">float32</option>
+          <option value="uint8">uint8</option>
+        </select>
+      </div>
+      <div class="row compact">
+        <label for="rawEndian">RAW endian</label>
+        <select id="rawEndian" disabled>
+          <option value="little" selected>little</option>
+          <option value="big">big</option>
+        </select>
+      </div>
+
+      <button id="resetView">Reset View</button>
+    </div>
+    <div id="stats">DEM: default</div>
+    <div id="scale">
+      <div id="scaleLabel">200 m</div>
+      <div id="scaleBar"></div>
+    </div>
+    <div id="legend">Left drag: rotate | Middle drag: pan | Wheel: zoom</div>
+  </div>
+
+  <script>
+    const HEIGHT_RANGE = 257.0;
+    const METERS_PER_PIXEL = 8.0;
+    const GRID_RES = 200;
+    const SHADOW_STEPS = 64;
+    const SHADOW_STEP_METERS = 16.0;
+    const SHADOW_BIAS = 0.5;
+    const FOV = Math.PI / 3;
+
+    const vertShader = `
+      precision highp float;
+
+      attribute vec3 aPosition;
+      attribute vec2 aTexCoord;
+
+      uniform mat4 uModelViewMatrix;
+      uniform mat4 uProjectionMatrix;
+      uniform sampler2D uHeightmap;
+      uniform float uHeightScale;
+      const float HEIGHT_RANGE = 257.0;
+
+      varying vec2 vUv;
+      varying vec3 vWorldPos;
+
+      void main() {
+        vUv = aTexCoord;
+        float h = texture2D(uHeightmap, vUv).r;
+        vec3 pos = aPosition;
+        pos.z += h * uHeightScale * HEIGHT_RANGE;
+        vWorldPos = pos;
+        gl_Position = uProjectionMatrix * uModelViewMatrix * vec4(pos, 1.0);
+      }
+    `;
+
+    const fragShader = `
+      precision highp float;
+
+      varying vec2 vUv;
+      varying vec3 vWorldPos;
+
+      uniform sampler2D uHeightmap;
+      uniform float uHeightScale;
+      const float HEIGHT_RANGE = 257.0;
+      uniform vec3 uLightDir;
+      uniform float uLightIntensity;
+      uniform float uAmbient;
+      uniform vec2 uTexel;
+      uniform float uMetersPerPixel;
+      uniform float uAlbedo;
+      uniform int uShadowSteps;
+      uniform float uShadowStepMeters;
+      uniform float uShadowBias;
+      uniform int uHemiSamples;
+      uniform vec3 uHemiDirs[64];
+      uniform float uHemiFactor;
+      uniform bool uUseShadows;
+      uniform bool uUseHemi;
+
+      float heightAt(vec2 uv) {
+        return texture2D(uHeightmap, uv).r * uHeightScale * HEIGHT_RANGE;
+      }
+
+      vec3 getNormal(vec2 uv) {
+        float hL = heightAt(uv + vec2(-uTexel.x, 0.0));
+        float hR = heightAt(uv + vec2(uTexel.x, 0.0));
+        float hD = heightAt(uv + vec2(0.0, -uTexel.y));
+        float hU = heightAt(uv + vec2(0.0, uTexel.y));
+        vec3 dx = vec3(2.0 * uMetersPerPixel, 0.0, hR - hL);
+        vec3 dy = vec3(0.0, 2.0 * uMetersPerPixel, hU - hD);
+        return normalize(cross(dx, dy));
+      }
+
+      float shadowFactor(vec2 uv, float h, vec3 lightDir) {
+        if (!uUseShadows) return 1.0;
+        if (lightDir.z <= 0.001) return 0.0;
+        vec2 uvPerMeter = uTexel / max(uMetersPerPixel, 0.001);
+        vec2 stepUv = lightDir.xy * uShadowStepMeters * uvPerMeter;
+        float stepH = lightDir.z * uShadowStepMeters;
+        vec2 p = uv;
+        float rayH = h;
+        for (int i = 0; i < 128; i++) {
+          if (i >= uShadowSteps) break;
+          p += stepUv;
+          if (p.x < 0.0 || p.x > 1.0 || p.y < 0.0 || p.y > 1.0) break;
+          rayH += stepH;
+          float terrainH = heightAt(p);
+          if (terrainH > rayH + uShadowBias) {
+            return 0.0;
+          }
+        }
+        return 1.0;
+      }
+
+      float hemiOcclusion(vec2 uv, float h, vec3 nrm) {
+        if (!uUseHemi) return 0.0;
+        float vis = 0.0;
+        vec2 uvPerMeter = uTexel / max(uMetersPerPixel, 0.001);
+        for (int i = 0; i < 64; i++) {
+          if (i >= uHemiSamples) break;
+          vec3 dir = uHemiDirs[i];
+          if (dot(dir, nrm) <= 0.0) continue;
+          vec2 stepUv = dir.xy * uShadowStepMeters * uvPerMeter;
+          float stepH = dir.z * uShadowStepMeters;
+          vec2 p = uv;
+          float rayH = h;
+          bool blocked = false;
+          for (int s = 0; s < 64; s++) {
+            if (s >= uShadowSteps) break;
+            p += stepUv;
+            if (p.x < 0.0 || p.x > 1.0 || p.y < 0.0 || p.y > 1.0) break;
+            rayH += stepH;
+            float terrainH = heightAt(p);
+            if (terrainH > rayH + uShadowBias) {
+              blocked = true;
+              break;
+            }
+          }
+          if (!blocked) {
+            vis += 1.0;
+          }
+        }
+        return vis / max(float(uHemiSamples), 1.0);
+      }
+
+      void main() {
+        float h = heightAt(vUv);
+        vec3 nrm = getNormal(vUv);
+        vec3 lightDir = normalize(uLightDir);
+        float ndotl = max(dot(nrm, lightDir), 0.0);
+        float shadow = shadowFactor(vUv, h, lightDir);
+        float hemi = uHemiFactor * uLightIntensity * hemiOcclusion(vUv, h, nrm);
+        float light = uAmbient + uLightIntensity * ndotl * shadow + hemi;
+        vec3 base = vec3(0.62, 0.67, 0.72) * uAlbedo;
+        vec3 lit = base * light;
+        gl_FragColor = vec4(lit, 1.0);
+      }
+    `;
+
+    let demImg;
+    let demTex;
+    let shaderProgram;
+    let lastRawBuffer = null;
+    let lastMessage = "";
+
+    const ui = {
+      container: document.getElementById("ui"),
+      file: document.getElementById("demFile"),
+      heightScale: document.getElementById("heightScale"),
+      heightScaleVal: document.getElementById("heightScaleVal"),
+      lightAz: document.getElementById("lightAz"),
+      lightAzVal: document.getElementById("lightAzVal"),
+      lightEl: document.getElementById("lightEl"),
+      lightElVal: document.getElementById("lightElVal"),
+      lightInt: document.getElementById("lightInt"),
+      lightIntVal: document.getElementById("lightIntVal"),
+      hemiFactor: document.getElementById("hemiFactor"),
+      hemiFactorVal: document.getElementById("hemiFactorVal"),
+      hemiSamples: document.getElementById("hemiSamples"),
+      hemiSamplesVal: document.getElementById("hemiSamplesVal"),
+      toggleShadows: document.getElementById("toggleShadows"),
+      toggleHemi: document.getElementById("toggleHemi"),
+      togglePerspective: document.getElementById("togglePerspective"),
+      toggleOrtho: document.getElementById("toggleOrtho"),
+
+rawWidth: document.getElementById("rawWidth"),
+      rawHeight: document.getElementById("rawHeight"),
+      rawType: document.getElementById("rawType"),
+      rawEndian: document.getElementById("rawEndian"),
+      resetView: document.getElementById("resetView"),
+      stats: document.getElementById("stats"),
+      scaleLabel: document.getElementById("scaleLabel"),
+      scaleBar: document.getElementById("scaleBar")
+    };
+
+    const cameraState = {
+      azimuth: 0.9,
+      elevation: 0.55,
+      distance: 2.1,
+      panX: 0,
+      panY: 0
+    };
+
+    let drag = null;
+    let uiHover = false;
+
+    function setup() {
+      const canvas = createCanvas(window.innerWidth, window.innerHeight, WEBGL);
+      canvas.parent("app");
+      noStroke();
+      textureMode(NORMAL);
+      shaderProgram = createShader(vertShader, fragShader);
+      canvas.elt.addEventListener("mousedown", (e) => { if (e.button === 1) e.preventDefault(); });
+      window.addEventListener("auxclick", (e) => { if (e.button === 1) e.preventDefault(); });
+      window.addEventListener("contextmenu", (e) => { if (!uiHover) e.preventDefault(); });
+
+      demImg = createGraphics(512, 512);
+      demImg.background(0);
+      demImg.noStroke();
+      for (let i = 0; i < 8; i++) {
+        const r = 220 - i * 20;
+        demImg.fill(255 - i * 18);
+        demImg.circle(256, 256, r);
+      }
+      demImg.loadPixels();
+      demTex = demImg.get();
+
+      ui.file.addEventListener("change", handleFile);
+      ui.resetView.addEventListener("click", resetView);
+      ui.container.addEventListener("mouseenter", () => { uiHover = true; });
+      ui.container.addEventListener("mouseleave", () => { uiHover = false; });
+
+      ui.togglePerspective.addEventListener("change", () => {
+        if (ui.togglePerspective.checked) ui.toggleOrtho.checked = false;
+        if (!ui.togglePerspective.checked && !ui.toggleOrtho.checked) ui.togglePerspective.checked = true;
+      });
+      ui.toggleOrtho.addEventListener("change", () => {
+        if (ui.toggleOrtho.checked) ui.togglePerspective.checked = false;
+        if (!ui.togglePerspective.checked && !ui.toggleOrtho.checked) ui.toggleOrtho.checked = true;
+      });
+
+      for (const btn of ui.container.querySelectorAll("button[data-scale]")) {
+        btn.addEventListener("click", () => {
+          ui.heightScale.value = btn.dataset.scale;
+          ui.heightScale.dispatchEvent(new Event("input"));
+        });
+      }
+
+      const reparseRaw = () => {
+        if (!lastRawBuffer) return;
+        loadRawBuffer(lastRawBuffer);
+      };
+
+      ui.rawWidth.addEventListener("change", reparseRaw);
+      ui.rawHeight.addEventListener("change", reparseRaw);
+      ui.rawType.addEventListener("change", reparseRaw);
+      ui.rawEndian.addEventListener("change", reparseRaw);
+
+      const bindSlider = (input, output, formatter) => {
+        const apply = () => { output.textContent = formatter(input.value); };
+        input.addEventListener("input", apply);
+        apply();
+      };
+
+      bindSlider(ui.heightScale, ui.heightScaleVal, (v) => Number(v).toFixed(2));
+      bindSlider(ui.lightAz, ui.lightAzVal, (v) => v);
+      bindSlider(ui.lightEl, ui.lightElVal, (v) => v);
+      bindSlider(ui.lightInt, ui.lightIntVal, (v) => Number(v).toFixed(1));
+      bindSlider(ui.hemiFactor, ui.hemiFactorVal, (v) => Number(v).toFixed(2));
+      bindSlider(ui.hemiSamples, ui.hemiSamplesVal, (v) => v);
+
+      updateLabels();
+    }
+
+    function windowResized() {
+      resizeCanvas(window.innerWidth, window.innerHeight);
+    }
+
+    function updateLabels() {
+      ui.heightScaleVal.textContent = Number(ui.heightScale.value).toFixed(2);
+      ui.lightAzVal.textContent = ui.lightAz.value;
+      ui.lightElVal.textContent = ui.lightEl.value;
+      ui.lightIntVal.textContent = Number(ui.lightInt.value).toFixed(1);
+      ui.hemiFactorVal.textContent = Number(ui.hemiFactor.value).toFixed(2);
+      ui.hemiSamplesVal.textContent = ui.hemiSamples.value;
+
+      const zRange = (HEIGHT_RANGE * Number(ui.heightScale.value)).toFixed(1);
+      const modeLabel = ui.toggleOrtho.checked ? "Ortho" : "Perspective";
+      const msgLine = lastMessage ? `
+${lastMessage}` : "";
+      ui.stats.textContent = `DEM: ${demTex.width} x ${demTex.height}
+` +
+        `Vertical exaggeration: ${Number(ui.heightScale.value).toFixed(2)}x
+` +
+        `Z range: ${zRange} m
+` +
+        `Light azimuth: ${ui.lightAz.value} deg
+` +
+        `Light elevation: ${ui.lightEl.value} deg
+` +
+        `Camera azimuth: ${degrees(cameraState.azimuth).toFixed(1)} deg
+` +
+        `Camera elevation: ${degrees(cameraState.elevation).toFixed(1)} deg
+` +
+        `Distance: ${cameraState.distance.toFixed(2)}
+` +
+        `Pan (m): (${cameraState.panX.toFixed(1)}, ${cameraState.panY.toFixed(1)})
+` +
+        `Projection: ${modeLabel}${msgLine}`;
+    }
+
+    function setRawInputsEnabled(enabled) {
+      ui.rawWidth.disabled = !enabled;
+      ui.rawHeight.disabled = !enabled;
+      ui.rawType.disabled = !enabled;
+      ui.rawEndian.disabled = !enabled;
+    }
+
+    function handleFile(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+      const ext = file.name.split(".").pop().toLowerCase();
+      lastMessage = "";
+      if (ext === "tif" || ext === "tiff") {
+        lastRawBuffer = null;
+        setRawInputsEnabled(false);
+        loadGeoTiff(file);
+      } else if (ext === "raw" || ext === "bin") {
+        setRawInputsEnabled(true);
+        loadRaw(file);
+      } else {
+        lastRawBuffer = null;
+        setRawInputsEnabled(false);
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          loadImage(e.target.result, (img) => {
+            demImg = img;
+            demTex = img;
+          });
+        };
+        reader.readAsDataURL(file);
+      }
+    }
+
+    async function loadGeoTiff(file) {
+      if (!window.GeoTIFF) {
+        lastMessage = "GeoTIFF loader unavailable (CDN blocked).";
+        return;
+      }
+      try {
+        const buffer = await file.arrayBuffer();
+        const tiff = await GeoTIFF.fromArrayBuffer(buffer);
+        const image = await tiff.getImage();
+        const width = image.getWidth();
+        const height = image.getHeight();
+        const raster = await image.readRasters({ interleave: true });
+        const { min, max } = minMax(raster);
+        demTex = createImage(width, height);
+        demTex.loadPixels();
+        for (let i = 0; i < width * height; i++) {
+          const v = (raster[i] - min) / (max - min || 1);
+          const c = Math.max(0, Math.min(255, Math.round(v * 255)));
+          const idx = i * 4;
+          demTex.pixels[idx] = c;
+          demTex.pixels[idx + 1] = c;
+          demTex.pixels[idx + 2] = c;
+          demTex.pixels[idx + 3] = 255;
+        }
+        demTex.updatePixels();
+      } catch (err) {
+        lastMessage = "GeoTIFF load failed.";
+      }
+    }
+
+    function loadRaw(file) {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        lastRawBuffer = e.target.result;
+        loadRawBuffer(lastRawBuffer);
+      };
+      reader.readAsArrayBuffer(file);
+    }
+
+    function loadRawBuffer(buffer) {
+      const width = Number(ui.rawWidth.value);
+      const height = Number(ui.rawHeight.value);
+      const type = ui.rawType.value;
+      const little = ui.rawEndian.value === "little";
+      if (!width || !height) return;
+      const view = new DataView(buffer);
+      const count = width * height;
+      const values = new Float32Array(count);
+      let stride = 1;
+      let readFn = null;
+
+      if (type === "uint16") {
+        stride = 2;
+        readFn = (i) => view.getUint16(i, little);
+      } else if (type === "int16") {
+        stride = 2;
+        readFn = (i) => view.getInt16(i, little);
+      } else if (type === "float32") {
+        stride = 4;
+        readFn = (i) => view.getFloat32(i, little);
+      } else {
+        stride = 1;
+        readFn = (i) => view.getUint8(i);
+      }
+
+      for (let i = 0; i < count; i++) {
+        values[i] = readFn(i * stride);
+      }
+
+      const { min, max } = minMax(values);
+      demTex = createImage(width, height);
+      demTex.loadPixels();
+      for (let i = 0; i < count; i++) {
+        const v = (values[i] - min) / (max - min || 1);
+        const c = Math.max(0, Math.min(255, Math.round(v * 255)));
+        const idx = i * 4;
+        demTex.pixels[idx] = c;
+        demTex.pixels[idx + 1] = c;
+        demTex.pixels[idx + 2] = c;
+        demTex.pixels[idx + 3] = 255;
+      }
+      demTex.updatePixels();
+    }
+
+    function minMax(arr) {
+      let min = Infinity;
+      let max = -Infinity;
+      for (let i = 0; i < arr.length; i++) {
+        const v = arr[i];
+        if (v < min) min = v;
+        if (v > max) max = v;
+      }
+      return { min, max };
+    }
+
+    function resetView() {
+      cameraState.azimuth = 0.9;
+      cameraState.elevation = 0.55;
+      cameraState.distance = 2.1;
+      cameraState.panX = 0;
+      cameraState.panY = 0;
+    }
+
+    function mousePressed() {
+      if (uiHover) return;
+      if (mouseButton === LEFT) {
+        drag = {
+          mode: "rotate",
+          x: mouseX,
+          y: mouseY,
+          az: cameraState.azimuth,
+          el: cameraState.elevation
+        };
+      } else if (mouseButton === CENTER) {
+        drag = {
+          mode: "pan",
+          x: mouseX,
+          y: mouseY,
+          panX: cameraState.panX,
+          panY: cameraState.panY
+        };
+      }
+    }
+
+    function mouseDragged() {
+      if (!drag) return;
+      const dx = mouseX - drag.x;
+      const dy = mouseY - drag.y;
+      if (drag.mode === "rotate") {
+        cameraState.azimuth = drag.az - dx * 0.01;
+        cameraState.elevation = constrain(drag.el + dy * 0.01, 0.05, 1.45);
+      } else if (drag.mode === "pan") {
+        const { right, up } = getCameraBasis();
+        const worldSize = demTex.width * METERS_PER_PIXEL;
+        const panScale = worldSize / Math.max(300, Math.min(width, height));
+        cameraState.panX = drag.panX - (right[0] * dx + up[0] * -dy) * panScale;
+        cameraState.panY = drag.panY - (right[1] * dx + up[1] * -dy) * panScale;
+      }
+    }
+
+    function mouseReleased() {
+      drag = null;
+    }
+
+    function mouseWheel(event) {
+      if (uiHover) return false;
+      const zoomFactor = 1 + event.delta * 0.001;
+      cameraState.distance = constrain(cameraState.distance * zoomFactor, 0.4, 6.5);
+      return false;
+    }
+
+    function dot3(a, b) {
+      return a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+    }
+
+    function cross3(a, b) {
+      return [
+        a[1] * b[2] - a[2] * b[1],
+        a[2] * b[0] - a[0] * b[2],
+        a[0] * b[1] - a[1] * b[0]
+      ];
+    }
+
+    function norm3(v) {
+      const l = Math.hypot(v[0], v[1], v[2]) || 1;
+      return [v[0] / l, v[1] / l, v[2] / l];
+    }
+
+    function makeHemiDirections(count) {
+      const dirs = [];
+      const golden = 2.399963229728653;
+      for (let i = 0; i < count; i++) {
+        const t = (i + 0.5) / count;
+        const phi = i * golden;
+        const z = t;
+        const r = Math.sqrt(Math.max(0, 1 - z * z));
+        dirs.push([r * Math.cos(phi), r * Math.sin(phi), z]);
+      }
+      return dirs;
+    }
+
+    function getCameraBasis() {
+      const targetZ = HEIGHT_RANGE * 0.5 * Number(ui.heightScale.value);
+      const target = [cameraState.panX, cameraState.panY, targetZ];
+      const worldSize = demTex.width * METERS_PER_PIXEL;
+      const r = worldSize * 0.8 * cameraState.distance;
+      const eye = [
+        target[0] + r * Math.cos(cameraState.elevation) * Math.sin(cameraState.azimuth),
+        target[1] + r * Math.cos(cameraState.elevation) * Math.cos(cameraState.azimuth),
+        target[2] + r * Math.sin(cameraState.elevation)
+      ];
+      const forward = norm3([target[0] - eye[0], target[1] - eye[1], target[2] - eye[2]]);
+      const right = norm3(cross3(forward, [0, 0, 1]));
+      const up = norm3(cross3(right, forward));
+      return { forward, right, up, eye, target, r };
+    }
+
+    function drawGridPlane(res, sizeMeters) {
+      const step = 1 / res;
+      beginShape(TRIANGLES);
+      for (let x = 0; x < res; x++) {
+        for (let y = 0; y < res; y++) {
+          const u0 = x * step;
+          const v0 = y * step;
+          const u1 = (x + 1) * step;
+          const v1 = (y + 1) * step;
+          const px0 = (u0 - 0.5) * sizeMeters;
+          const px1 = (u1 - 0.5) * sizeMeters;
+          const py0 = (v0 - 0.5) * sizeMeters;
+          const py1 = (v1 - 0.5) * sizeMeters;
+          vertex(px0, py0, 0, u0, v0);
+          vertex(px1, py0, 0, u1, v0);
+          vertex(px1, py1, 0, u1, v1);
+          vertex(px0, py0, 0, u0, v0);
+          vertex(px1, py1, 0, u1, v1);
+          vertex(px0, py1, 0, u0, v1);
+        }
+      }
+      endShape();
+    }
+
+    function updateScaleBar(viewDistance) {
+      const metersPerPixel = (2 * viewDistance * Math.tan(FOV / 2)) / height;
+      const targetPx = 120;
+      const targetMeters = metersPerPixel * targetPx;
+      const niceMeters = niceNumber(targetMeters);
+      const px = niceMeters / metersPerPixel;
+      ui.scaleBar.style.width = `${Math.max(40, Math.min(240, px))}px`;
+      ui.scaleLabel.textContent = `${formatMeters(niceMeters)} (scale bar)`;
+    }
+
+    function niceNumber(value) {
+      const exp = Math.floor(Math.log10(Math.max(value, 1e-6)));
+      const f = value / Math.pow(10, exp);
+      let nf = 1;
+      if (f < 1.5) nf = 1;
+      else if (f < 3) nf = 2;
+      else if (f < 7) nf = 5;
+      else nf = 10;
+      return nf * Math.pow(10, exp);
+    }
+
+    function formatMeters(m) {
+      if (m >= 1000) return `${(m / 1000).toFixed(m % 1000 === 0 ? 0 : 1)} km`;
+      return `${Math.round(m)} m`;
+    }
+
+    function applyProjection(r, worldSize) {
+      if (ui.toggleOrtho.checked) {
+        const aspect = width / height;
+        const s = worldSize * 0.35 * cameraState.distance;
+        ortho(-s * aspect, s * aspect, -s, s, 0.01, worldSize * 6.0);
+      } else {
+        perspective(FOV, width / height, 0.01, worldSize * 6.0);
+      }
+    }
+
+    function draw() {
+      background(12, 15, 20);
+      updateLabels();
+
+      const az = radians(Number(ui.lightAz.value));
+      const el = radians(Number(ui.lightEl.value));
+      const lightDir = [
+        Math.cos(el) * Math.sin(az),
+        Math.cos(el) * Math.cos(az),
+        Math.sin(el)
+      ];
+
+      const { eye, target, r } = getCameraBasis();
+      const worldSize = demTex.width * METERS_PER_PIXEL;
+
+      applyProjection(r, worldSize);
+      camera(eye[0], eye[1], eye[2], target[0], target[1], target[2], 0, 0, -1);
+
+      const hemiDirs = makeHemiDirections(64);
+      const flatHemi = hemiDirs.flat();
+
+      shader(shaderProgram);
+      shaderProgram.setUniform("uHeightmap", demTex);
+      shaderProgram.setUniform("uHeightScale", Number(ui.heightScale.value));
+      shaderProgram.setUniform("uLightDir", lightDir);
+      shaderProgram.setUniform("uLightIntensity", Math.min(Number(ui.lightInt.value), 2));
+      shaderProgram.setUniform("uAmbient", 0.25);
+      shaderProgram.setUniform("uTexel", [1 / demTex.width, 1 / demTex.height]);
+      shaderProgram.setUniform("uMetersPerPixel", METERS_PER_PIXEL);
+      shaderProgram.setUniform("uAlbedo", 0.85);
+      shaderProgram.setUniform("uShadowSteps", SHADOW_STEPS);
+      shaderProgram.setUniform("uShadowStepMeters", SHADOW_STEP_METERS);
+      shaderProgram.setUniform("uShadowBias", SHADOW_BIAS);
+      shaderProgram.setUniform("uHemiSamples", Number(ui.hemiSamples.value));
+      shaderProgram.setUniform("uHemiDirs", flatHemi);
+      shaderProgram.setUniform("uHemiFactor", Math.min(Number(ui.hemiFactor.value), 1));
+      shaderProgram.setUniform("uUseShadows", ui.toggleShadows.checked);
+      shaderProgram.setUniform("uUseHemi", ui.toggleHemi.checked);
+push();
+      drawGridPlane(GRID_RES, worldSize);
+      pop();
+
+      resetShader();
+      updateScaleBar(r);
+
+      const forward = norm3([target[0] - eye[0], target[1] - eye[1], target[2] - eye[2]]);
+      const right = norm3(cross3(forward, [0, 0, 1]));
+      const up = norm3(cross3(right, forward));
+
+      push();
+      resetMatrix();
+      translate(-width / 2 + 70, -height / 2 + 70);
+      strokeWeight(2);
+
+      const axes = [
+        { v: [1, 0, 0], c: [230, 85, 70], label: "X" },
+        { v: [0, 1, 0], c: [90, 200, 90], label: "Y" },
+        { v: [0, 0, 1], c: [80, 140, 230], label: "Z" }
+      ];
+
+      for (const axis of axes) {
+        const sx = dot3(axis.v, right);
+        const sy = dot3(axis.v, up);
+        stroke(axis.c[0], axis.c[1], axis.c[2]);
+        line(0, 0, sx * 28, -sy * 28);
+        noStroke();
+        fill(axis.c[0], axis.c[1], axis.c[2]);
+        textSize(12);
+        text(axis.label, sx * 32, -sy * 32);
+      }
+
+      pop();
+    }
+  </script>
+</body>
+</html>
+
+
+
+
+
+
+
+
+
+
