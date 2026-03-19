@@ -236,7 +236,7 @@
         <div class="details-content">
           <div class="row">
             <label for="gridRes" title="Number of mesh subdivisions">Grid Detail</label>
-            <input id="gridRes" type="range" min="50" max="600" step="10" value="200" />
+            <input id="gridRes" type="range" min="50" max="400" step="10" value="200" />
             <span id="gridResVal">200</span>
           </div>
           <div class="row">
@@ -277,6 +277,27 @@
       </details>
 
       <details>
+        <summary>Performance & Quality</summary>
+        <div class="details-content">
+          <div class="row">
+            <label for="shadowSteps">Shadow Steps</label>
+            <input id="shadowSteps" type="range" min="8" max="128" step="8" value="48" />
+            <span id="shadowStepsVal">48</span>
+          </div>
+          <div class="row">
+            <label for="shadowDist">Shadow Distance</label>
+            <input id="shadowDist" type="range" min="2" max="32" step="1" value="12" />
+            <span id="shadowDistVal">12</span>
+          </div>
+          <div class="row">
+            <label for="hemiSamples">Hemi Samples</label>
+            <input id="hemiSamples" type="range" min="4" max="32" step="1" value="16" />
+            <span id="hemiSamplesVal">16</span>
+          </div>
+        </div>
+      </details>
+
+      <details>
         <summary>Lighting & Shadows</summary>
         <div class="details-content">
           <div class="row">
@@ -298,11 +319,6 @@
             <label for="hemiFactor">Hemi factor</label>
             <input id="hemiFactor" type="range" min="0" max="1" step="0.05" value="0.35" />
             <span id="hemiFactorVal">0.35</span>
-          </div>
-          <div class="row">
-            <label for="hemiSamples">Hemi samples</label>
-            <input id="hemiSamples" type="range" min="4" max="64" step="1" value="20" />
-            <span id="hemiSamplesVal">20</span>
           </div>
           <div class="row toggle">
             <label for="toggleShadows">Shadows</label>
@@ -388,13 +404,14 @@
       uniform float uShadowStepMeters;
       uniform float uShadowBias;
       uniform int uHemiSamples;
-      uniform vec3 uHemiDirs[64];
+      uniform vec3 uHemiDirs[32];
       uniform float uHemiFactor;
-      uniform bool uUseShadows;
-      uniform bool uUseHemi;
+      uniform int uUseShadows;
+      uniform int uUseHemi;
 
       float heightAt(vec2 uv) {
-        float rawH = texture2D(uHeightmap, uv).r;
+        vec2 clampedUv = clamp(uv, 0.0, 1.0);
+        float rawH = texture2D(uHeightmap, clampedUv).r;
         return max(rawH, uWaterLevel) * uHeightScale * uHeightRange;
       }
 
@@ -409,13 +426,13 @@
       }
 
       float shadowFactor(vec2 uv, float h, vec3 lightDir) {
-        if (!uUseShadows) return 1.0;
+        if (uUseShadows == 0) return 1.0;
         if (lightDir.z <= 0.001) return 0.0;
         vec2 uvPerMeter = uTexel / max(uMetersPerPixel, 0.001);
         vec2 stepUv = lightDir.xy * uShadowStepMeters * uvPerMeter;
         float stepH = lightDir.z * uShadowStepMeters;
-        vec2 p = uv;
-        float rayH = h;
+        vec2 p = uv + stepUv * 0.1;
+        float rayH = h + stepH * 0.1;
         for (int i = 0; i < 128; i++) {
           if (i >= uShadowSteps) break;
           p += stepUv;
@@ -430,23 +447,23 @@
       }
 
       float hemiOcclusion(vec2 uv, float h, vec3 nrm) {
-        if (!uUseHemi) return 0.0;
+        if (uUseHemi == 0) return 0.0;
         float vis = 0.0;
         vec2 uvPerMeter = uTexel / max(uMetersPerPixel, 0.001);
-        for (int i = 0; i < 64; i++) {
+        for (int i = 0; i < 32; i++) {
           if (i >= uHemiSamples) break;
           vec3 dir = uHemiDirs[i];
           if (dot(dir, nrm) <= 0.0) continue;
           vec2 stepUv = dir.xy * uShadowStepMeters * uvPerMeter;
           float stepH = dir.z * uShadowStepMeters;
-          vec2 p = uv;
-          float rayH = h;
+          vec2 p = uv + stepUv * 0.2;
+          float rayH = h + stepH * 0.2;
           bool blocked = false;
-          for (int s = 0; s < 64; s++) {
-            if (s >= uShadowSteps) break;
-            p += stepUv;
+          for (int s = 0; s < 32; s++) {
+            if (s >= uShadowSteps / 4) break;
+            p += stepUv * 4.0;
             if (p.x < 0.0 || p.x > 1.0 || p.y < 0.0 || p.y > 1.0) break;
-            rayH += stepH;
+            rayH += stepH * 4.0;
             float terrainH = heightAt(p);
             if (terrainH > rayH + uShadowBias) {
               blocked = true;
@@ -524,6 +541,10 @@
       hemiFactorVal: document.getElementById("hemiFactorVal"),
       hemiSamples: document.getElementById("hemiSamples"),
       hemiSamplesVal: document.getElementById("hemiSamplesVal"),
+      shadowSteps: document.getElementById("shadowSteps"),
+      shadowStepsVal: document.getElementById("shadowStepsVal"),
+      shadowDist: document.getElementById("shadowDist"),
+      shadowDistVal: document.getElementById("shadowDistVal"),
       toggleShadows: document.getElementById("toggleShadows"),
       toggleHemi: document.getElementById("toggleHemi"),
       togglePerspective: document.getElementById("togglePerspective"),
@@ -561,7 +582,7 @@
       window.addEventListener("auxclick", (e) => { if (e.button === 1) e.preventDefault(); });
       window.addEventListener("contextmenu", (e) => { if (!uiHover) e.preventDefault(); });
 
-      hemiDirsCached = makeHemiDirections(64).flat();
+      hemiDirsCached = makeHemiDirections(32).flat();
 
       demImg = createGraphics(512, 512);
       demImg.background(0);
@@ -579,7 +600,7 @@
       ui.topView = document.getElementById("topView");
       ui.topView.addEventListener("click", () => {
         cameraState.azimuth = 0;
-        cameraState.elevation = 1.57;
+        cameraState.elevation = 1.52;
         cameraState.distance = 2.0;
       });
       ui.saveImg.addEventListener("click", () => {
@@ -629,6 +650,8 @@
       bindSlider(ui.lightInt, ui.lightIntVal, (v) => Number(v).toFixed(1));
       bindSlider(ui.hemiFactor, ui.hemiFactorVal, (v) => Number(v).toFixed(2));
       bindSlider(ui.hemiSamples, ui.hemiSamplesVal, (v) => v);
+      bindSlider(ui.shadowSteps, ui.shadowStepsVal, (v) => v);
+      bindSlider(ui.shadowDist, ui.shadowDistVal, (v) => v);
 
       updateLabels();
     }
@@ -646,6 +669,8 @@
       ui.lightIntVal.textContent = Number(ui.lightInt.value).toFixed(1);
       ui.hemiFactorVal.textContent = Number(ui.hemiFactor.value).toFixed(2);
       ui.hemiSamplesVal.textContent = ui.hemiSamples.value;
+      ui.shadowStepsVal.textContent = ui.shadowSteps.value;
+      ui.shadowDistVal.textContent = ui.shadowDist.value;
 
       const zRange = (HEIGHT_RANGE * Number(ui.heightScale.value)).toFixed(1);
       const modeLabel = ui.toggleOrtho.checked ? "Ortho" : "Perspective";
@@ -911,7 +936,8 @@ ${lastMessage}` : "";
         target[2] + r * Math.sin(cameraState.elevation)
       ];
       const forward = norm3([target[0] - eye[0], target[1] - eye[1], target[2] - eye[2]]);
-      const right = norm3(cross3(forward, [0, 0, 1]));
+      const refUp = Math.abs(forward[2]) > 0.95 ? [0, 1, 0] : [0, 0, 1];
+      const right = norm3(cross3(forward, refUp));
       const up = norm3(cross3(right, forward));
       return { forward, right, up, eye, target, r };
     }
@@ -943,7 +969,7 @@ ${lastMessage}` : "";
     }
 
     function applyProjection(r, worldSize) {
-      const near = Math.max(0.01, r * 0.0001);
+      const near = 0.05;
       const far = worldSize * 10.0;
       if (ui.toggleOrtho.checked) {
         const aspect = width / height;
@@ -1000,14 +1026,14 @@ ${lastMessage}` : "";
       shaderProgram.setUniform("uTexel", [1 / demTex.width, 1 / demTex.height]);
       shaderProgram.setUniform("uMetersPerPixel", METERS_PER_PIXEL);
       shaderProgram.setUniform("uAlbedo", 0.85);
-      shaderProgram.setUniform("uShadowSteps", parseInt(SHADOW_STEPS));
-      shaderProgram.setUniform("uShadowStepMeters", SHADOW_STEP_METERS);
+      shaderProgram.setUniform("uShadowSteps", parseInt(ui.shadowSteps.value));
+      shaderProgram.setUniform("uShadowStepMeters", parseFloat(ui.shadowDist.value));
       shaderProgram.setUniform("uShadowBias", SHADOW_BIAS);
       shaderProgram.setUniform("uHemiSamples", parseInt(ui.hemiSamples.value));
       shaderProgram.setUniform("uHemiDirs", hemiDirsCached);
       shaderProgram.setUniform("uHemiFactor", Math.min(Number(ui.hemiFactor.value), 1));
-      shaderProgram.setUniform("uUseShadows", ui.toggleShadows.checked);
-      shaderProgram.setUniform("uUseHemi", ui.toggleHemi.checked);
+      shaderProgram.setUniform("uUseShadows", ui.toggleShadows.checked ? 1 : 0);
+      shaderProgram.setUniform("uUseHemi", ui.toggleHemi.checked ? 1 : 0);
 
       push();
       // Using plane() instead of manual beginShape for major performance boost
