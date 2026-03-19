@@ -43,6 +43,30 @@
       border: 1px solid #2a3443;
       border-radius: 12px;
       box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
+      max-height: calc(100vh - 40px);
+      overflow-y: auto;
+    }
+
+    details {
+      border: 1px solid #2d3b4b;
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.03);
+    }
+
+    summary {
+      padding: 0.45rem 0.65rem;
+      cursor: pointer;
+      font-weight: 600;
+      font-size: 0.9rem;
+      color: var(--accent);
+      user-select: none;
+    }
+
+    .details-content {
+      padding: 0.6rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
     }
 
     .row {
@@ -168,88 +192,129 @@
 <body>
   <div id="app">
     <div id="ui">
-      <div class="row" style="grid-template-columns: 1fr;">
-        <label for="demFile">Load DEM (image, GeoTIFF, or RAW)</label>
-        <input id="demFile" type="file" accept="image/*,.tif,.tiff,.raw,.bin" />
-      </div>
-      <div class="row">
-        <label for="heightScale">Height scale (0-4)</label>
-        <input id="heightScale" type="range" min="0" max="4" step="0.01" value="1" />
-        <span id="heightScaleVal">1.00</span>
-      </div>
-      <div class="preset-row">
-        <button data-scale="0.5">0.5x</button>
-        <button data-scale="1">1x</button>
-        <button data-scale="2">2x</button>
-        <button data-scale="4">4x</button>
-      </div>
-      <div class="row">
-        <label for="lightAz">Light azimuth</label>
-        <input id="lightAz" type="range" min="-180" max="180" step="1" value="135" />
-        <span id="lightAzVal">135</span>
-      </div>
-      <div class="row">
-        <label for="lightEl">Light elevation</label>
-        <input id="lightEl" type="range" min="0" max="90" step="1" value="55" />
-        <span id="lightElVal">55</span>
-      </div>
-      <div class="row">
-        <label for="lightInt">Light intensity</label>
-        <input id="lightInt" type="range" min="0" max="2" step="0.1" value="1.0" />
-        <span id="lightIntVal">1.0</span>
-      </div>
-      <div class="row">
-        <label for="hemiFactor">Hemi factor</label>
-        <input id="hemiFactor" type="range" min="0" max="1" step="0.05" value="0.35" />
-        <span id="hemiFactorVal">0.35</span>
-      </div>
-      <div class="row">
-        <label for="hemiSamples">Hemi samples</label>
-        <input id="hemiSamples" type="range" min="4" max="64" step="1" value="20" />
-        <span id="hemiSamplesVal">20</span>
-      </div>
-      <div class="row toggle">
-        <label for="toggleShadows">Shadows</label>
-        <input id="toggleShadows" type="checkbox" checked />
-      </div>
-      <div class="row toggle">
-        <label for="toggleHemi">Hemisphere</label>
-        <input id="toggleHemi" type="checkbox" checked />
-      </div>
-      <div class="row toggle">
-        <label for="togglePerspective">Perspective</label>
-        <input id="togglePerspective" type="checkbox" checked />
-      </div>
-      <div class="row toggle">
-        <label for="toggleOrtho">Ortho</label>
-        <input id="toggleOrtho" type="checkbox" />
-      </div>
-      <div class="row compact">
-        <label for="rawWidth">RAW width</label>
-        <input id="rawWidth" type="number" min="2" value="512" disabled />
-      </div>
-      <div class="row compact">
-        <label for="rawHeight">RAW height</label>
-        <input id="rawHeight" type="number" min="2" value="512" disabled />
-      </div>
-      <div class="row compact">
-        <label for="rawType">RAW type</label>
-        <select id="rawType" disabled>
-          <option value="uint16" selected>uint16</option>
-          <option value="int16">int16</option>
-          <option value="float32">float32</option>
-          <option value="uint8">uint8</option>
-        </select>
-      </div>
-      <div class="row compact">
-        <label for="rawEndian">RAW endian</label>
-        <select id="rawEndian" disabled>
-          <option value="little" selected>little</option>
-          <option value="big">big</option>
-        </select>
-      </div>
+      <details open>
+        <summary>Data & Map</summary>
+        <div class="details-content">
+          <div class="row" style="grid-template-columns: 1fr;">
+            <label for="demFile">Load DEM</label>
+            <input id="demFile" type="file" accept="image/*,.tif,.tiff,.raw,.bin" />
+          </div>
+          <div class="row">
+            <label for="gridRes" title="Number of mesh subdivisions">Grid Detail</label>
+            <input id="gridRes" type="range" min="50" max="400" step="10" value="200" />
+            <span id="gridResVal">200</span>
+          </div>
+          <div class="row compact">
+            <label for="rawWidth">RAW width</label>
+            <input id="rawWidth" type="number" min="2" value="512" disabled />
+          </div>
+          <div class="row compact">
+            <label for="rawHeight">RAW height</label>
+            <input id="rawHeight" type="number" min="2" value="512" disabled />
+          </div>
+          <div class="row compact">
+            <label for="rawType">RAW type</label>
+            <select id="rawType" disabled>
+              <option value="uint16" selected>uint16</option>
+              <option value="int16">int16</option>
+              <option value="float32">float32</option>
+              <option value="uint8">uint8</option>
+            </select>
+          </div>
+          <div class="row compact">
+            <label for="rawEndian">RAW endian</label>
+            <select id="rawEndian" disabled>
+              <option value="little" selected>little</option>
+              <option value="big">big</option>
+            </select>
+          </div>
+        </div>
+      </details>
 
-      <button id="resetView">Reset View</button>
+      <details open>
+        <summary>Terrain & Rendering</summary>
+        <div class="details-content">
+          <div class="row">
+            <label for="heightScale">Height scale</label>
+            <input id="heightScale" type="range" min="0" max="4" step="0.01" value="1" />
+            <span id="heightScaleVal">1.00</span>
+          </div>
+          <div class="preset-row">
+            <button data-scale="0.5">0.5x</button>
+            <button data-scale="1">1x</button>
+            <button data-scale="2">2x</button>
+            <button data-scale="4">4x</button>
+          </div>
+          <div class="row">
+            <label for="waterLevel">Water Level</label>
+            <input id="waterLevel" type="range" min="0" max="1" step="0.01" value="0.0" />
+            <span id="waterLevelVal">0.00</span>
+          </div>
+          <div class="row">
+            <label for="paletteType">Palette</label>
+            <select id="paletteType">
+              <option value="0">Default (Gray)</option>
+              <option value="1">Terrain</option>
+              <option value="2">Magma</option>
+              <option value="3">Viridis</option>
+            </select>
+            <span></span>
+          </div>
+          <div class="row toggle">
+            <label for="togglePerspective">Perspective</label>
+            <input id="togglePerspective" type="checkbox" checked />
+          </div>
+          <div class="row toggle">
+            <label for="toggleOrtho">Ortho</label>
+            <input id="toggleOrtho" type="checkbox" />
+          </div>
+        </div>
+      </details>
+
+      <details>
+        <summary>Lighting & Shadows</summary>
+        <div class="details-content">
+          <div class="row">
+            <label for="lightAz">Light azimuth</label>
+            <input id="lightAz" type="range" min="-180" max="180" step="1" value="135" />
+            <span id="lightAzVal">135</span>
+          </div>
+          <div class="row">
+            <label for="lightEl">Light elevation</label>
+            <input id="lightEl" type="range" min="0" max="90" step="1" value="55" />
+            <span id="lightElVal">55</span>
+          </div>
+          <div class="row">
+            <label for="lightInt">Light intensity</label>
+            <input id="lightInt" type="range" min="0" max="2" step="0.1" value="1.0" />
+            <span id="lightIntVal">1.0</span>
+          </div>
+          <div class="row">
+            <label for="hemiFactor">Hemi factor</label>
+            <input id="hemiFactor" type="range" min="0" max="1" step="0.05" value="0.35" />
+            <span id="hemiFactorVal">0.35</span>
+          </div>
+          <div class="row">
+            <label for="hemiSamples">Hemi samples</label>
+            <input id="hemiSamples" type="range" min="4" max="64" step="1" value="20" />
+            <span id="hemiSamplesVal">20</span>
+          </div>
+          <div class="row toggle">
+            <label for="toggleShadows">Shadows</label>
+            <input id="toggleShadows" type="checkbox" checked />
+          </div>
+          <div class="row toggle">
+            <label for="toggleHemi">Hemisphere</label>
+            <input id="toggleHemi" type="checkbox" checked />
+          </div>
+        </div>
+      </details>
+
+      <div class="preset-row" style="margin-top: 4px;">
+        <button id="topView">Top</button>
+        <button id="resetView">Reset</button>
+        <button id="saveImg" style="grid-column: span 2; background: #2d4b3b;">Save View</button>
+      </div>
     </div>
     <div id="stats">DEM: default</div>
     <div id="scale">
@@ -260,8 +325,8 @@
   </div>
 
   <script>
-    const HEIGHT_RANGE = 257.0;
-    const METERS_PER_PIXEL = 8.0;
+    let HEIGHT_RANGE = 257.0;
+    let METERS_PER_PIXEL = 8.0;
     const GRID_RES = 200;
     const SHADOW_STEPS = 64;
     const SHADOW_STEP_METERS = 16.0;
@@ -278,16 +343,19 @@
       uniform mat4 uProjectionMatrix;
       uniform sampler2D uHeightmap;
       uniform float uHeightScale;
-      const float HEIGHT_RANGE = 257.0;
+      uniform float uWaterLevel;
+      uniform float uHeightRange;
 
       varying vec2 vUv;
       varying vec3 vWorldPos;
+      varying float vRawH;
 
       void main() {
         vUv = aTexCoord;
-        float h = texture2D(uHeightmap, vUv).r;
+        vRawH = texture2D(uHeightmap, vUv).r;
+        float h = max(vRawH, uWaterLevel);
         vec3 pos = aPosition;
-        pos.z += h * uHeightScale * HEIGHT_RANGE;
+        pos.z += h * uHeightScale * uHeightRange;
         vWorldPos = pos;
         gl_Position = uProjectionMatrix * uModelViewMatrix * vec4(pos, 1.0);
       }
@@ -298,10 +366,13 @@
 
       varying vec2 vUv;
       varying vec3 vWorldPos;
+      varying float vRawH;
 
       uniform sampler2D uHeightmap;
       uniform float uHeightScale;
-      const float HEIGHT_RANGE = 257.0;
+      uniform float uWaterLevel;
+      uniform float uHeightRange;
+      uniform int uPaletteType;
       uniform vec3 uLightDir;
       uniform float uLightIntensity;
       uniform float uAmbient;
@@ -318,7 +389,8 @@
       uniform bool uUseHemi;
 
       float heightAt(vec2 uv) {
-        return texture2D(uHeightmap, uv).r * uHeightScale * HEIGHT_RANGE;
+        float rawH = texture2D(uHeightmap, uv).r;
+        return max(rawH, uWaterLevel) * uHeightScale * uHeightRange;
       }
 
       vec3 getNormal(vec2 uv) {
@@ -383,6 +455,29 @@
         return vis / max(float(uHemiSamples), 1.0);
       }
 
+      vec3 getBaseColor(float h) {
+        if (h < uWaterLevel) return vec3(0.12, 0.38, 0.65);
+        if (uPaletteType == 0) return vec3(0.62, 0.67, 0.72);
+        if (uPaletteType == 1) {
+          if (h < 0.2) return mix(vec3(0.15, 0.35, 0.15), vec3(0.25, 0.5, 0.2), h / 0.2);
+          if (h < 0.5) return mix(vec3(0.25, 0.5, 0.2), vec3(0.65, 0.55, 0.35), (h - 0.2) / 0.3);
+          if (h < 0.8) return mix(vec3(0.65, 0.55, 0.35), vec3(0.45, 0.35, 0.25), (h - 0.5) / 0.3);
+          return mix(vec3(0.45, 0.35, 0.25), vec3(0.95, 0.95, 0.95), (h - 0.8) / 0.2);
+        }
+        if (uPaletteType == 2) {
+          if (h < 0.33) return mix(vec3(0.0, 0.0, 0.2), vec3(0.5, 0.0, 0.5), h / 0.33);
+          if (h < 0.66) return mix(vec3(0.5, 0.0, 0.5), vec3(0.8, 0.2, 0.0), (h - 0.33) / 0.33);
+          return mix(vec3(0.8, 0.2, 0.0), vec3(1.0, 0.9, 0.0), (h - 0.66) / 0.34);
+        }
+        if (uPaletteType == 3) {
+          if (h < 0.25) return mix(vec3(0.27, 0.0, 0.33), vec3(0.23, 0.28, 0.54), h / 0.25);
+          if (h < 0.5) return mix(vec3(0.23, 0.28, 0.54), vec3(0.13, 0.56, 0.55), (h - 0.25) / 0.25);
+          if (h < 0.75) return mix(vec3(0.13, 0.56, 0.55), vec3(0.37, 0.8, 0.23), (h - 0.5) / 0.25);
+          return mix(vec3(0.37, 0.8, 0.23), vec3(0.99, 0.91, 0.14), (h - 0.75) / 0.25);
+        }
+        return vec3(0.62, 0.67, 0.72);
+      }
+
       void main() {
         float h = heightAt(vUv);
         vec3 nrm = getNormal(vUv);
@@ -391,7 +486,7 @@
         float shadow = shadowFactor(vUv, h, lightDir);
         float hemi = uHemiFactor * uLightIntensity * hemiOcclusion(vUv, h, nrm);
         float light = uAmbient + uLightIntensity * ndotl * shadow + hemi;
-        vec3 base = vec3(0.62, 0.67, 0.72) * uAlbedo;
+        vec3 base = getBaseColor(vRawH);
         vec3 lit = base * light;
         gl_FragColor = vec4(lit, 1.0);
       }
@@ -402,12 +497,18 @@
     let shaderProgram;
     let lastRawBuffer = null;
     let lastMessage = "";
+    let hemiDirsCached;
 
     const ui = {
       container: document.getElementById("ui"),
       file: document.getElementById("demFile"),
       heightScale: document.getElementById("heightScale"),
       heightScaleVal: document.getElementById("heightScaleVal"),
+      waterLevel: document.getElementById("waterLevel"),
+      waterLevelVal: document.getElementById("waterLevelVal"),
+      paletteType: document.getElementById("paletteType"),
+      gridRes: document.getElementById("gridRes"),
+      gridResVal: document.getElementById("gridResVal"),
       lightAz: document.getElementById("lightAz"),
       lightAzVal: document.getElementById("lightAzVal"),
       lightEl: document.getElementById("lightEl"),
@@ -422,21 +523,21 @@
       toggleHemi: document.getElementById("toggleHemi"),
       togglePerspective: document.getElementById("togglePerspective"),
       toggleOrtho: document.getElementById("toggleOrtho"),
-
-rawWidth: document.getElementById("rawWidth"),
+      rawWidth: document.getElementById("rawWidth"),
       rawHeight: document.getElementById("rawHeight"),
       rawType: document.getElementById("rawType"),
       rawEndian: document.getElementById("rawEndian"),
       resetView: document.getElementById("resetView"),
+      saveImg: document.getElementById("saveImg"),
       stats: document.getElementById("stats"),
       scaleLabel: document.getElementById("scaleLabel"),
       scaleBar: document.getElementById("scaleBar")
     };
 
     const cameraState = {
-      azimuth: 0.9,
-      elevation: 0.55,
-      distance: 2.1,
+      azimuth: 0.8,
+      elevation: 0.45,
+      distance: 2.5,
       panX: 0,
       panY: 0
     };
@@ -454,6 +555,8 @@ rawWidth: document.getElementById("rawWidth"),
       window.addEventListener("auxclick", (e) => { if (e.button === 1) e.preventDefault(); });
       window.addEventListener("contextmenu", (e) => { if (!uiHover) e.preventDefault(); });
 
+      hemiDirsCached = makeHemiDirections(64).flat();
+
       demImg = createGraphics(512, 512);
       demImg.background(0);
       demImg.noStroke();
@@ -467,6 +570,16 @@ rawWidth: document.getElementById("rawWidth"),
 
       ui.file.addEventListener("change", handleFile);
       ui.resetView.addEventListener("click", resetView);
+      ui.topView = document.getElementById("topView");
+      ui.topView.addEventListener("click", () => {
+        cameraState.azimuth = 0;
+        cameraState.elevation = 1.57;
+        cameraState.distance = 2.0;
+      });
+      ui.saveImg.addEventListener("click", () => {
+        const name = ui.file.files[0] ? ui.file.files[0].name.split(".")[0] : "dem_viewer";
+        saveCanvas(name, "png");
+      });
       ui.container.addEventListener("mouseenter", () => { uiHover = true; });
       ui.container.addEventListener("mouseleave", () => { uiHover = false; });
 
@@ -503,6 +616,8 @@ rawWidth: document.getElementById("rawWidth"),
       };
 
       bindSlider(ui.heightScale, ui.heightScaleVal, (v) => Number(v).toFixed(2));
+      bindSlider(ui.waterLevel, ui.waterLevelVal, (v) => Number(v).toFixed(2));
+      bindSlider(ui.gridRes, ui.gridResVal, (v) => v);
       bindSlider(ui.lightAz, ui.lightAzVal, (v) => v);
       bindSlider(ui.lightEl, ui.lightElVal, (v) => v);
       bindSlider(ui.lightInt, ui.lightIntVal, (v) => Number(v).toFixed(1));
@@ -518,6 +633,8 @@ rawWidth: document.getElementById("rawWidth"),
 
     function updateLabels() {
       ui.heightScaleVal.textContent = Number(ui.heightScale.value).toFixed(2);
+      ui.waterLevelVal.textContent = Number(ui.waterLevel.value).toFixed(2);
+      ui.gridResVal.textContent = ui.gridRes.value;
       ui.lightAzVal.textContent = ui.lightAz.value;
       ui.lightElVal.textContent = ui.lightEl.value;
       ui.lightIntVal.textContent = Number(ui.lightInt.value).toFixed(1);
@@ -560,7 +677,7 @@ ${lastMessage}` : "";
       const file = event.target.files[0];
       if (!file) return;
       const ext = file.name.split(".").pop().toLowerCase();
-      lastMessage = "";
+      lastMessage = "Loading " + file.name + "...";
       if (ext === "tif" || ext === "tiff") {
         lastRawBuffer = null;
         setRawInputsEnabled(false);
@@ -593,8 +710,19 @@ ${lastMessage}` : "";
         const image = await tiff.getImage();
         const width = image.getWidth();
         const height = image.getHeight();
+
+        // Try to get resolution
+        try {
+          const res = image.getResolution();
+          if (res && res[0]) METERS_PER_PIXEL = Math.abs(res[0]);
+        } catch(e) {}
+
         const raster = await image.readRasters({ interleave: true });
         const { min, max } = minMax(raster);
+
+        if (max > min) HEIGHT_RANGE = max - min;
+        else HEIGHT_RANGE = 257.0;
+
         demTex = createImage(width, height);
         demTex.loadPixels();
         for (let i = 0; i < width * height; i++) {
@@ -607,7 +735,9 @@ ${lastMessage}` : "";
           demTex.pixels[idx + 3] = 255;
         }
         demTex.updatePixels();
+        lastMessage = "Loaded " + file.name;
       } catch (err) {
+        console.error(err);
         lastMessage = "GeoTIFF load failed.";
       }
     }
@@ -678,9 +808,9 @@ ${lastMessage}` : "";
     }
 
     function resetView() {
-      cameraState.azimuth = 0.9;
-      cameraState.elevation = 0.55;
-      cameraState.distance = 2.1;
+      cameraState.azimuth = 0.8;
+      cameraState.elevation = 0.45;
+      cameraState.distance = 2.5;
       cameraState.panX = 0;
       cameraState.panY = 0;
     }
@@ -779,30 +909,6 @@ ${lastMessage}` : "";
       return { forward, right, up, eye, target, r };
     }
 
-    function drawGridPlane(res, sizeMeters) {
-      const step = 1 / res;
-      beginShape(TRIANGLES);
-      for (let x = 0; x < res; x++) {
-        for (let y = 0; y < res; y++) {
-          const u0 = x * step;
-          const v0 = y * step;
-          const u1 = (x + 1) * step;
-          const v1 = (y + 1) * step;
-          const px0 = (u0 - 0.5) * sizeMeters;
-          const px1 = (u1 - 0.5) * sizeMeters;
-          const py0 = (v0 - 0.5) * sizeMeters;
-          const py1 = (v1 - 0.5) * sizeMeters;
-          vertex(px0, py0, 0, u0, v0);
-          vertex(px1, py0, 0, u1, v0);
-          vertex(px1, py1, 0, u1, v1);
-          vertex(px0, py0, 0, u0, v0);
-          vertex(px1, py1, 0, u1, v1);
-          vertex(px0, py1, 0, u0, v1);
-        }
-      }
-      endShape();
-    }
-
     function updateScaleBar(viewDistance) {
       const metersPerPixel = (2 * viewDistance * Math.tan(FOV / 2)) / height;
       const targetPx = 120;
@@ -840,7 +946,23 @@ ${lastMessage}` : "";
     }
 
     function draw() {
-      background(12, 15, 20);
+      background(0);
+
+      // Background gradient
+      noLights();
+      push();
+      resetMatrix();
+      ortho();
+      const c1 = color(30, 45, 65);
+      const c2 = color(12, 15, 20);
+      beginShape(TRIANGLE_STRIP);
+      fill(c1); vertex(-width/2, -height/2);
+      fill(c1); vertex(width/2, -height/2);
+      fill(c2); vertex(-width/2, height/2);
+      fill(c2); vertex(width/2, height/2);
+      endShape();
+      pop();
+
       updateLabels();
 
       const az = radians(Number(ui.lightAz.value));
@@ -857,28 +979,31 @@ ${lastMessage}` : "";
       applyProjection(r, worldSize);
       camera(eye[0], eye[1], eye[2], target[0], target[1], target[2], 0, 0, -1);
 
-      const hemiDirs = makeHemiDirections(64);
-      const flatHemi = hemiDirs.flat();
-
       shader(shaderProgram);
       shaderProgram.setUniform("uHeightmap", demTex);
       shaderProgram.setUniform("uHeightScale", Number(ui.heightScale.value));
+      shaderProgram.setUniform("uHeightRange", HEIGHT_RANGE);
+      shaderProgram.setUniform("uWaterLevel", Number(ui.waterLevel.value));
+      shaderProgram.setUniform("uPaletteType", parseInt(ui.paletteType.value));
       shaderProgram.setUniform("uLightDir", lightDir);
       shaderProgram.setUniform("uLightIntensity", Math.min(Number(ui.lightInt.value), 2));
       shaderProgram.setUniform("uAmbient", 0.25);
       shaderProgram.setUniform("uTexel", [1 / demTex.width, 1 / demTex.height]);
       shaderProgram.setUniform("uMetersPerPixel", METERS_PER_PIXEL);
       shaderProgram.setUniform("uAlbedo", 0.85);
-      shaderProgram.setUniform("uShadowSteps", SHADOW_STEPS);
+      shaderProgram.setUniform("uShadowSteps", parseInt(SHADOW_STEPS));
       shaderProgram.setUniform("uShadowStepMeters", SHADOW_STEP_METERS);
       shaderProgram.setUniform("uShadowBias", SHADOW_BIAS);
-      shaderProgram.setUniform("uHemiSamples", Number(ui.hemiSamples.value));
-      shaderProgram.setUniform("uHemiDirs", flatHemi);
+      shaderProgram.setUniform("uHemiSamples", parseInt(ui.hemiSamples.value));
+      shaderProgram.setUniform("uHemiDirs", hemiDirsCached);
       shaderProgram.setUniform("uHemiFactor", Math.min(Number(ui.hemiFactor.value), 1));
       shaderProgram.setUniform("uUseShadows", ui.toggleShadows.checked);
       shaderProgram.setUniform("uUseHemi", ui.toggleHemi.checked);
-push();
-      drawGridPlane(GRID_RES, worldSize);
+
+      push();
+      // Using plane() instead of manual beginShape for major performance boost
+      const res = parseInt(ui.gridRes.value);
+      plane(worldSize, worldSize, res, res);
       pop();
 
       resetShader();
@@ -915,13 +1040,3 @@ push();
   </script>
 </body>
 </html>
-
-
-
-
-
-
-
-
-
-
