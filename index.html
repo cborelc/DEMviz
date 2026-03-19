@@ -200,7 +200,7 @@
             <input id="demFile" type="file" accept="image/*,.tif,.tiff,.raw,.bin" />
           </div>
           <div class="row">
-            <label for="gridRes">Grid Res</label>
+            <label for="gridRes" title="Number of mesh subdivisions">Grid Detail</label>
             <input id="gridRes" type="range" min="50" max="400" step="10" value="200" />
             <span id="gridResVal">200</span>
           </div>
@@ -311,7 +311,8 @@
       </details>
 
       <div class="preset-row" style="margin-top: 4px;">
-        <button id="resetView" style="grid-column: span 2;">Reset View</button>
+        <button id="topView">Top</button>
+        <button id="resetView">Reset</button>
         <button id="saveImg" style="grid-column: span 2; background: #2d4b3b;">Save View</button>
       </div>
     </div>
@@ -324,8 +325,8 @@
   </div>
 
   <script>
-    const HEIGHT_RANGE = 257.0;
-    const METERS_PER_PIXEL = 8.0;
+    let HEIGHT_RANGE = 257.0;
+    let METERS_PER_PIXEL = 8.0;
     const GRID_RES = 200;
     const SHADOW_STEPS = 64;
     const SHADOW_STEP_METERS = 16.0;
@@ -343,7 +344,7 @@
       uniform sampler2D uHeightmap;
       uniform float uHeightScale;
       uniform float uWaterLevel;
-      const float HEIGHT_RANGE = 257.0;
+      uniform float uHeightRange;
 
       varying vec2 vUv;
       varying vec3 vWorldPos;
@@ -354,7 +355,7 @@
         vRawH = texture2D(uHeightmap, vUv).r;
         float h = max(vRawH, uWaterLevel);
         vec3 pos = aPosition;
-        pos.z += h * uHeightScale * HEIGHT_RANGE;
+        pos.z += h * uHeightScale * uHeightRange;
         vWorldPos = pos;
         gl_Position = uProjectionMatrix * uModelViewMatrix * vec4(pos, 1.0);
       }
@@ -370,8 +371,8 @@
       uniform sampler2D uHeightmap;
       uniform float uHeightScale;
       uniform float uWaterLevel;
+      uniform float uHeightRange;
       uniform int uPaletteType;
-      const float HEIGHT_RANGE = 257.0;
       uniform vec3 uLightDir;
       uniform float uLightIntensity;
       uniform float uAmbient;
@@ -389,7 +390,7 @@
 
       float heightAt(vec2 uv) {
         float rawH = texture2D(uHeightmap, uv).r;
-        return max(rawH, uWaterLevel) * uHeightScale * HEIGHT_RANGE;
+        return max(rawH, uWaterLevel) * uHeightScale * uHeightRange;
       }
 
       vec3 getNormal(vec2 uv) {
@@ -496,6 +497,7 @@
     let shaderProgram;
     let lastRawBuffer = null;
     let lastMessage = "";
+    let hemiDirsCached;
 
     const ui = {
       container: document.getElementById("ui"),
@@ -553,6 +555,8 @@
       window.addEventListener("auxclick", (e) => { if (e.button === 1) e.preventDefault(); });
       window.addEventListener("contextmenu", (e) => { if (!uiHover) e.preventDefault(); });
 
+      hemiDirsCached = makeHemiDirections(64).flat();
+
       demImg = createGraphics(512, 512);
       demImg.background(0);
       demImg.noStroke();
@@ -566,8 +570,15 @@
 
       ui.file.addEventListener("change", handleFile);
       ui.resetView.addEventListener("click", resetView);
+      ui.topView = document.getElementById("topView");
+      ui.topView.addEventListener("click", () => {
+        cameraState.azimuth = 0;
+        cameraState.elevation = 1.57;
+        cameraState.distance = 2.0;
+      });
       ui.saveImg.addEventListener("click", () => {
-        saveCanvas("dem_viewer", "png");
+        const name = ui.file.files[0] ? ui.file.files[0].name.split(".")[0] : "dem_viewer";
+        saveCanvas(name, "png");
       });
       ui.container.addEventListener("mouseenter", () => { uiHover = true; });
       ui.container.addEventListener("mouseleave", () => { uiHover = false; });
@@ -666,7 +677,7 @@ ${lastMessage}` : "";
       const file = event.target.files[0];
       if (!file) return;
       const ext = file.name.split(".").pop().toLowerCase();
-      lastMessage = "";
+      lastMessage = "Loading " + file.name + "...";
       if (ext === "tif" || ext === "tiff") {
         lastRawBuffer = null;
         setRawInputsEnabled(false);
@@ -699,8 +710,19 @@ ${lastMessage}` : "";
         const image = await tiff.getImage();
         const width = image.getWidth();
         const height = image.getHeight();
+
+        // Try to get resolution
+        try {
+          const res = image.getResolution();
+          if (res && res[0]) METERS_PER_PIXEL = Math.abs(res[0]);
+        } catch(e) {}
+
         const raster = await image.readRasters({ interleave: true });
         const { min, max } = minMax(raster);
+
+        if (max > min) HEIGHT_RANGE = max - min;
+        else HEIGHT_RANGE = 257.0;
+
         demTex = createImage(width, height);
         demTex.loadPixels();
         for (let i = 0; i < width * height; i++) {
@@ -713,7 +735,9 @@ ${lastMessage}` : "";
           demTex.pixels[idx + 3] = 255;
         }
         demTex.updatePixels();
+        lastMessage = "Loaded " + file.name;
       } catch (err) {
+        console.error(err);
         lastMessage = "GeoTIFF load failed.";
       }
     }
@@ -885,30 +909,6 @@ ${lastMessage}` : "";
       return { forward, right, up, eye, target, r };
     }
 
-    function drawGridPlane(res, sizeMeters) {
-      const step = 1 / res;
-      beginShape(TRIANGLES);
-      for (let x = 0; x < res; x++) {
-        for (let y = 0; y < res; y++) {
-          const u0 = x * step;
-          const v0 = y * step;
-          const u1 = (x + 1) * step;
-          const v1 = (y + 1) * step;
-          const px0 = (u0 - 0.5) * sizeMeters;
-          const px1 = (u1 - 0.5) * sizeMeters;
-          const py0 = (v0 - 0.5) * sizeMeters;
-          const py1 = (v1 - 0.5) * sizeMeters;
-          vertex(px0, py0, 0, u0, v0);
-          vertex(px1, py0, 0, u1, v0);
-          vertex(px1, py1, 0, u1, v1);
-          vertex(px0, py0, 0, u0, v0);
-          vertex(px1, py1, 0, u1, v1);
-          vertex(px0, py1, 0, u0, v1);
-        }
-      }
-      endShape();
-    }
-
     function updateScaleBar(viewDistance) {
       const metersPerPixel = (2 * viewDistance * Math.tan(FOV / 2)) / height;
       const targetPx = 120;
@@ -946,6 +946,8 @@ ${lastMessage}` : "";
     }
 
     function draw() {
+      background(0);
+
       // Background gradient
       noLights();
       push();
@@ -977,12 +979,10 @@ ${lastMessage}` : "";
       applyProjection(r, worldSize);
       camera(eye[0], eye[1], eye[2], target[0], target[1], target[2], 0, 0, -1);
 
-      const hemiDirs = makeHemiDirections(64);
-      const flatHemi = hemiDirs.flat();
-
       shader(shaderProgram);
       shaderProgram.setUniform("uHeightmap", demTex);
       shaderProgram.setUniform("uHeightScale", Number(ui.heightScale.value));
+      shaderProgram.setUniform("uHeightRange", HEIGHT_RANGE);
       shaderProgram.setUniform("uWaterLevel", Number(ui.waterLevel.value));
       shaderProgram.setUniform("uPaletteType", parseInt(ui.paletteType.value));
       shaderProgram.setUniform("uLightDir", lightDir);
@@ -991,16 +991,19 @@ ${lastMessage}` : "";
       shaderProgram.setUniform("uTexel", [1 / demTex.width, 1 / demTex.height]);
       shaderProgram.setUniform("uMetersPerPixel", METERS_PER_PIXEL);
       shaderProgram.setUniform("uAlbedo", 0.85);
-      shaderProgram.setUniform("uShadowSteps", SHADOW_STEPS);
+      shaderProgram.setUniform("uShadowSteps", parseInt(SHADOW_STEPS));
       shaderProgram.setUniform("uShadowStepMeters", SHADOW_STEP_METERS);
       shaderProgram.setUniform("uShadowBias", SHADOW_BIAS);
-      shaderProgram.setUniform("uHemiSamples", Number(ui.hemiSamples.value));
-      shaderProgram.setUniform("uHemiDirs", flatHemi);
+      shaderProgram.setUniform("uHemiSamples", parseInt(ui.hemiSamples.value));
+      shaderProgram.setUniform("uHemiDirs", hemiDirsCached);
       shaderProgram.setUniform("uHemiFactor", Math.min(Number(ui.hemiFactor.value), 1));
       shaderProgram.setUniform("uUseShadows", ui.toggleShadows.checked);
       shaderProgram.setUniform("uUseHemi", ui.toggleHemi.checked);
-push();
-      drawGridPlane(parseInt(ui.gridRes.value), worldSize);
+
+      push();
+      // Using plane() instead of manual beginShape for major performance boost
+      const res = parseInt(ui.gridRes.value);
+      plane(worldSize, worldSize, res, res);
       pop();
 
       resetShader();
