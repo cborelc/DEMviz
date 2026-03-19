@@ -199,41 +199,46 @@
             <label for="demFile">Load DEM</label>
             <input id="demFile" type="file" accept="image/*,.tif,.tiff,.raw,.bin" />
           </div>
-          <div class="row">
-            <label for="gridRes" title="Number of mesh subdivisions">Grid Detail</label>
-            <input id="gridRes" type="range" min="50" max="400" step="10" value="200" />
-            <span id="gridResVal">200</span>
-          </div>
-          <div class="row compact">
-            <label for="rawWidth">RAW width</label>
-            <input id="rawWidth" type="number" min="2" value="512" disabled />
-          </div>
-          <div class="row compact">
-            <label for="rawHeight">RAW height</label>
-            <input id="rawHeight" type="number" min="2" value="512" disabled />
-          </div>
-          <div class="row compact">
-            <label for="rawType">RAW type</label>
-            <select id="rawType" disabled>
-              <option value="uint16" selected>uint16</option>
-              <option value="int16">int16</option>
-              <option value="float32">float32</option>
-              <option value="uint8">uint8</option>
-            </select>
-          </div>
-          <div class="row compact">
-            <label for="rawEndian">RAW endian</label>
-            <select id="rawEndian" disabled>
-              <option value="little" selected>little</option>
-              <option value="big">big</option>
-            </select>
-          </div>
+          <details id="rawSettings" style="margin-top: 0.5rem;">
+            <summary style="font-size: 0.8rem; color: var(--muted);">RAW Format Settings</summary>
+            <div class="details-content">
+              <div class="row compact">
+                <label for="rawWidth">RAW width</label>
+                <input id="rawWidth" type="number" min="2" value="512" disabled />
+              </div>
+              <div class="row compact">
+                <label for="rawHeight">RAW height</label>
+                <input id="rawHeight" type="number" min="2" value="512" disabled />
+              </div>
+              <div class="row compact">
+                <label for="rawType">RAW type</label>
+                <select id="rawType" disabled>
+                  <option value="uint16" selected>uint16</option>
+                  <option value="int16">int16</option>
+                  <option value="float32">float32</option>
+                  <option value="uint8">uint8</option>
+                </select>
+              </div>
+              <div class="row compact">
+                <label for="rawEndian">RAW endian</label>
+                <select id="rawEndian" disabled>
+                  <option value="little" selected>little</option>
+                  <option value="big">big</option>
+                </select>
+              </div>
+            </div>
+          </details>
         </div>
       </details>
 
       <details open>
         <summary>Terrain & Rendering</summary>
         <div class="details-content">
+          <div class="row">
+            <label for="gridRes" title="Number of mesh subdivisions">Grid Detail</label>
+            <input id="gridRes" type="range" min="50" max="600" step="10" value="200" />
+            <span id="gridResVal">200</span>
+          </div>
           <div class="row">
             <label for="heightScale">Height scale</label>
             <input id="heightScale" type="range" min="0" max="4" step="0.01" value="1" />
@@ -527,6 +532,7 @@
       rawHeight: document.getElementById("rawHeight"),
       rawType: document.getElementById("rawType"),
       rawEndian: document.getElementById("rawEndian"),
+      rawSettings: document.getElementById("rawSettings"),
       resetView: document.getElementById("resetView"),
       saveImg: document.getElementById("saveImg"),
       stats: document.getElementById("stats"),
@@ -684,6 +690,7 @@ ${lastMessage}` : "";
         loadGeoTiff(file);
       } else if (ext === "raw" || ext === "bin") {
         setRawInputsEnabled(true);
+        if (ui.rawSettings) ui.rawSettings.open = true;
         loadRaw(file);
       } else {
         lastRawBuffer = null;
@@ -859,7 +866,7 @@ ${lastMessage}` : "";
     function mouseWheel(event) {
       if (uiHover) return false;
       const zoomFactor = 1 + event.delta * 0.001;
-      cameraState.distance = constrain(cameraState.distance * zoomFactor, 0.4, 6.5);
+      cameraState.distance = constrain(cameraState.distance * zoomFactor, 0.05, 10.0);
       return false;
     }
 
@@ -936,12 +943,14 @@ ${lastMessage}` : "";
     }
 
     function applyProjection(r, worldSize) {
+      const near = Math.max(0.01, r * 0.0001);
+      const far = worldSize * 10.0;
       if (ui.toggleOrtho.checked) {
         const aspect = width / height;
         const s = worldSize * 0.35 * cameraState.distance;
-        ortho(-s * aspect, s * aspect, -s, s, 0.01, worldSize * 6.0);
+        ortho(-s * aspect, s * aspect, -s, s, near, far);
       } else {
-        perspective(FOV, width / height, 0.01, worldSize * 6.0);
+        perspective(FOV, width / height, near, far);
       }
     }
 
