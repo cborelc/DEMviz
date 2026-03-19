@@ -186,6 +186,11 @@
       min-width: 240px;
     }
 
+    .key-hint {
+      color: var(--accent);
+      font-weight: bold;
+    }
+
     canvas { display: block; }
   </style>
 </head>
@@ -342,7 +347,10 @@
       <div id="scaleLabel">200 m</div>
       <div id="scaleBar"></div>
     </div>
-    <div id="legend">Left drag: rotate | Middle drag: pan | Wheel: zoom</div>
+    <div id="legend">
+      Drag: rotate/pan | Wheel: zoom <br/>
+      <span class="key-hint">AD</span>: Pan | <span class="key-hint">WS</span>: Zoom | <span class="key-hint">QE</span>: Vertical | <span class="key-hint">Arrows</span>: Rotate
+    </div>
   </div>
 
   <script>
@@ -431,8 +439,8 @@
         vec2 uvPerMeter = uTexel / max(uMetersPerPixel, 0.001);
         vec2 stepUv = lightDir.xy * uShadowStepMeters * uvPerMeter;
         float stepH = lightDir.z * uShadowStepMeters;
-        vec2 p = uv + stepUv * 0.1;
-        float rayH = h + stepH * 0.1;
+        vec2 p = uv + stepUv * 0.2;
+        float rayH = h + stepH * 0.2;
         for (int i = 0; i < 128; i++) {
           if (i >= uShadowSteps) break;
           p += stepUv;
@@ -456,8 +464,8 @@
           if (dot(dir, nrm) <= 0.0) continue;
           vec2 stepUv = dir.xy * uShadowStepMeters * uvPerMeter;
           float stepH = dir.z * uShadowStepMeters;
-          vec2 p = uv + stepUv * 0.2;
-          float rayH = h + stepH * 0.2;
+          vec2 p = uv + stepUv * 0.3;
+          float rayH = h + stepH * 0.3;
           bool blocked = false;
           for (int s = 0; s < 32; s++) {
             if (s >= uShadowSteps / 4) break;
@@ -572,6 +580,8 @@
     let drag = null;
     let uiHover = false;
 
+    let lastLabelUpdate = 0;
+
     function setup() {
       const canvas = createCanvas(window.innerWidth, window.innerHeight, WEBGL);
       canvas.parent("app");
@@ -653,6 +663,10 @@
       bindSlider(ui.shadowSteps, ui.shadowStepsVal, (v) => v);
       bindSlider(ui.shadowDist, ui.shadowDistVal, (v) => v);
 
+      // DOM updates are expensive, so we'll only do it on interaction or periodically
+      ui.container.addEventListener("input", () => updateLabels());
+      ui.container.addEventListener("change", () => updateLabels());
+
       updateLabels();
     }
 
@@ -661,6 +675,9 @@
     }
 
     function updateLabels() {
+      if (millis() - lastLabelUpdate < 200) return;
+      lastLabelUpdate = millis();
+
       ui.heightScaleVal.textContent = Number(ui.heightScale.value).toFixed(2);
       ui.waterLevelVal.textContent = Number(ui.waterLevel.value).toFixed(2);
       ui.gridResVal.textContent = ui.gridRes.value;
@@ -969,7 +986,7 @@ ${lastMessage}` : "";
     }
 
     function applyProjection(r, worldSize) {
-      const near = 0.05;
+      const near = 0.01;
       const far = worldSize * 10.0;
       if (ui.toggleOrtho.checked) {
         const aspect = width / height;
@@ -980,8 +997,55 @@ ${lastMessage}` : "";
       }
     }
 
+    function handleKeyboardControls(basis) {
+      const moveSpeed = 0.02 * cameraState.distance;
+      const rotateSpeed = 0.03;
+      const zoomSpeed = 1.03;
+      const heightSpeed = 0.01;
+
+      const { right, up } = basis;
+
+      if (keyIsDown(87)) cameraState.distance = constrain(cameraState.distance / zoomSpeed, 0.05, 10.0); // W
+      if (keyIsDown(83)) cameraState.distance = constrain(cameraState.distance * zoomSpeed, 0.05, 10.0); // S
+
+      if (keyIsDown(65)) { // A
+        cameraState.panX -= right[0] * moveSpeed * 500;
+        cameraState.panY -= right[1] * moveSpeed * 500;
+      }
+      if (keyIsDown(68)) { // D
+        cameraState.panX += right[0] * moveSpeed * 500;
+        cameraState.panY += right[1] * moveSpeed * 500;
+      }
+
+      if (keyIsDown(81)) { // Q
+        cameraState.panX -= up[0] * moveSpeed * 500;
+        cameraState.panY -= up[1] * moveSpeed * 500;
+      }
+      if (keyIsDown(69)) { // E
+        cameraState.panX += up[0] * moveSpeed * 500;
+        cameraState.panY += up[1] * moveSpeed * 500;
+      }
+
+      if (keyIsDown(90)) { // Z
+        ui.heightScale.value = constrain(parseFloat(ui.heightScale.value) + heightSpeed, 0, 4);
+        updateLabels();
+      }
+      if (keyIsDown(88)) { // X
+        ui.heightScale.value = constrain(parseFloat(ui.heightScale.value) - heightSpeed, 0, 4);
+        updateLabels();
+      }
+
+      if (keyIsDown(LEFT_ARROW)) cameraState.azimuth += rotateSpeed;
+      if (keyIsDown(RIGHT_ARROW)) cameraState.azimuth -= rotateSpeed;
+      if (keyIsDown(UP_ARROW)) cameraState.elevation = constrain(cameraState.elevation - rotateSpeed, 0.05, 1.45);
+      if (keyIsDown(DOWN_ARROW)) cameraState.elevation = constrain(cameraState.elevation + rotateSpeed, 0.05, 1.45);
+    }
+
     function draw() {
       background(0);
+
+      const basis = getCameraBasis();
+      handleKeyboardControls(basis);
 
       // Background gradient
       noLights();
@@ -1008,7 +1072,7 @@ ${lastMessage}` : "";
         Math.sin(el)
       ];
 
-      const { eye, target, r } = getCameraBasis();
+      const { eye, target, r } = basis;
       const worldSize = demTex.width * METERS_PER_PIXEL;
 
       applyProjection(r, worldSize);
@@ -1036,6 +1100,7 @@ ${lastMessage}` : "";
       shaderProgram.setUniform("uUseHemi", ui.toggleHemi.checked ? 1 : 0);
 
       push();
+      const { right, up } = basis;
       // Using plane() instead of manual beginShape for major performance boost
       const res = parseInt(ui.gridRes.value);
       plane(worldSize, worldSize, res, res);
@@ -1043,10 +1108,6 @@ ${lastMessage}` : "";
 
       resetShader();
       updateScaleBar(r);
-
-      const forward = norm3([target[0] - eye[0], target[1] - eye[1], target[2] - eye[2]]);
-      const right = norm3(cross3(forward, [0, 0, 1]));
-      const up = norm3(cross3(right, forward));
 
       push();
       resetMatrix();
